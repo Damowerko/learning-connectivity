@@ -1,25 +1,26 @@
 import argparse
-import h5py
 import json
 import time
-import torch
-import matplotlib.pyplot as plt
-import matplotlib as mpl
-import networkx as nx
-import numpy as np
-
 from math import ceil
 from multiprocessing import Process, Queue, cpu_count
 from pathlib import Path
+
+import h5py
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import networkx as nx
+import numpy as np
+import torch
 from scipy import spatial
 
-from cnn import load_model_for_eval, get_file_name
+from cnn import get_file_name, load_model_for_eval
 from connectivity_maximization import circle_points
 from hdf5_dataset_utils import ConnectivityDataset, cnn_image_parameters, plot_image
-from mid.connectivity_optimization import ConnectivityOpt as ConnOpt, round_sf
-from mid.channel_model import PiecewisePathLossModel
-from mid.feasibility import connect_graph, adaptive_bbx, min_feasible_sample
 from mid import lloyd
+from mid.channel_model import PiecewisePathLossModel
+from mid.connectivity_optimization import ConnectivityOpt as ConnOpt
+from mid.connectivity_optimization import round_sf
+from mid.feasibility import adaptive_bbx, connect_graph, min_feasible_sample
 
 
 def scale_from_filename(filename):
@@ -110,7 +111,7 @@ def connectivity_from_CNN(input_image, model, x_task, params, samples=1, viz=Fal
                 del cc[cc_inds[1]]
                 edm[config_inds, config_inds[::-1]] = cc_min_dist
 
-            graph = nx.from_numpy_matrix(edm)
+            graph = nx.from_numpy_array(edm)
             terminals = list(range(x_task.shape[0]))
             st = nx.algorithms.approximation.steiner_tree(graph, terminals)
 
