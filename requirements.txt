@@ -3,7 +3,7 @@ h5py
 matplotlib
 numpy
 pyqt5
-pytorch_lightning==0.10.0
+pytorch_lightning
 scikit-image
 scipy
 tk
