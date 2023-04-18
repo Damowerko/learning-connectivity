@@ -76,7 +76,7 @@ def main():
                     ncol=2,
                     bbox_to_anchor=(0.5, 1.05),
                 )
-    plt.savefig("figures/generalization.pdf")
+    plt.savefig("figures/mid_transfer.pdf")
     plt.show()
 
 
