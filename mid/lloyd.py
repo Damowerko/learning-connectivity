@@ -61,7 +61,6 @@ def compute_peaks(image, threshold_val=80, blur_sigma=1, region_size=7):
 
 
 def compute_voronoi(pts, bbx):
-
     # reflect points about all sides of bbx
     pts_l = np.copy(pts)
     pts_l[:, 0] = -pts_l[:, 0] + 2 * bbx[0]
@@ -102,7 +101,7 @@ def lloyd_step(image, xy, config, voronoi_cells, coverage_range):
         cell_pixel_pos = xy[pixel_mask]
         cell_pixel_val = image[pixel_mask]
         cell_volume = np.sum(cell_pixel_val)
-        
+
         # if there are intensity values >0 within the voronoi cell compute
         # the intensity weighted centroid of of the cell otherwise compute
         # the geometric centroid of the cell

@@ -12,6 +12,7 @@ from torchvision.utils import make_grid
 
 class View(nn.Module):
     """helper class to provide view functionality in sequential containers"""
+
     def __init__(self, size):
         super().__init__()
         self.size = size
@@ -40,11 +41,11 @@ class AEBase(pl.LightningModule):
         self.log_it = 0
 
         # keep track of the best validation models
-        self.val_loss_best = float('Inf')
+        self.val_loss_best = float("Inf")
         self.best_model_path = None
 
         # names used for saving checkpoints
-        self.model_name = ''     # set by derived class
+        self.model_name = ""  # set by derived class
         self.dataset_name = dataset_name
 
         # initialize network
@@ -74,11 +75,13 @@ class AEBase(pl.LightningModule):
 
         img_list = []
         for i in range(x.shape[0]):
-            img_list.append(x[i,...].cpu().detach())
-            img_list.append(y_hat[i,...].cpu().detach())
-            img_list.append(y[i,...].cpu().detach())
+            img_list.append(x[i, ...].cpu().detach())
+            img_list.append(y_hat[i, ...].cpu().detach())
+            img_list.append(y[i, ...].cpu().detach())
 
-        grid = torch.clamp(make_grid(img_list, nrow=3, padding=20, pad_value=1), 0.0, 1.0)
+        grid = torch.clamp(
+            make_grid(img_list, nrow=3, padding=20, pad_value=1), 0.0, 1.0
+        )
         self.logger.experiment.add_image(name, grid, self.current_epoch)
 
     def training_step(self, batch, batch_idx):
@@ -92,7 +95,9 @@ class AEBase(pl.LightningModule):
 
         self.loss_hist += loss.item()
         if batch_idx != 0 and batch_idx % self.log_step == 0:
-            self.logger.experiment.add_scalar('loss', self.loss_hist / self.log_step, self.log_it)
+            self.logger.experiment.add_scalar(
+                "loss", self.loss_hist / self.log_step, self.log_it
+            )
             self.loss_hist = 0.0
             self.log_it += 1
 
@@ -103,7 +108,7 @@ class AEBase(pl.LightningModule):
         torch.set_grad_enabled(False)
         self.eval()
 
-        self.log_network_image(self.train_progress_batch, 'train_results')
+        self.log_network_image(self.train_progress_batch, "train_results")
 
         torch.set_grad_enabled(True)
         self.train()
@@ -128,15 +133,18 @@ class AEBase(pl.LightningModule):
             if self.best_model_path is not None and self.best_model_path.exists():
                 self.best_model_path.unlink()
 
-            timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
-            stats_str = f'valloss_{val_loss:.3e}_epoch_{self.current_epoch}'
-            ckpt_name = '__'.join((self.model_name, self.dataset_name, stats_str, timestamp)) + '.ckpt'
-            filename = Path(self.logger.log_dir) / 'checkpoints' / ckpt_name
+            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            stats_str = f"valloss_{val_loss:.3e}_epoch_{self.current_epoch}"
+            ckpt_name = (
+                "__".join((self.model_name, self.dataset_name, stats_str, timestamp))
+                + ".ckpt"
+            )
+            filename = Path(self.logger.log_dir) / "checkpoints" / ckpt_name
             self.trainer.save_checkpoint(filename, weights_only=True)
             self.best_model_path = filename
 
-        self.logger.experiment.add_scalar('val_loss', val_loss, self.current_epoch)
-        self.log_network_image(self.val_progress_batch, 'val_results')
+        self.logger.experiment.add_scalar("val_loss", val_loss, self.current_epoch)
+        self.log_network_image(self.val_progress_batch, "val_results")
 
     def output(self, x):
         """like self.forward but only returns the image without training extras"""
@@ -147,7 +155,7 @@ class AEBase(pl.LightningModule):
         with torch.no_grad():
             x = x[None, None] / 255.0
             y_hat = self.output(x.float())
-            y_hat = torch.clamp(255*y_hat, 0, 255).to(torch.uint8).squeeze()
+            y_hat = torch.clamp(255 * y_hat, 0, 255).to(torch.uint8).squeeze()
         return y_hat
 
     def inference(self, x):
@@ -162,7 +170,7 @@ class AEBase(pl.LightningModule):
 class UAEBase(AEBase):
     """your stock undercomplete auto encoder"""
 
-    def __init__(self, log_step=1, dataset_name='Dataset'):
+    def __init__(self, log_step=1, dataset_name="Dataset"):
         super().__init__(log_step, dataset_name)
 
     def forward(self, x):
@@ -177,23 +185,22 @@ class BetaVAEBase(AEBase):
 
     """
 
-    def __init__(self, log_step=1, dataset_name='Dataset'):
+    def __init__(self, log_step=1, dataset_name="Dataset"):
         super().__init__(log_step, dataset_name)
 
     def forward(self, x):
-
         # encoder spits out latent distribution as a single 32x1 vector with the
         # first 16 elements corresponding to the mean and the last 16 elements
         # corresponding to the log of the variance
         latent_distribution = self.encoder(x)
-        mu = latent_distribution[:, :self.z_dim]
-        logvar = latent_distribution[:, self.z_dim:]
+        mu = latent_distribution[:, : self.z_dim]
+        logvar = latent_distribution[:, self.z_dim :]
 
         if self.training:
             # generate the input to the decoder using the reparameterization trick
             std = logvar.div(2).exp()
             eps = torch.randn_like(std)
-            z = mu + std*eps
+            z = mu + std * eps
         else:
             z = mu
 
@@ -213,12 +220,16 @@ class BetaVAEBase(AEBase):
         y_hat, mu, logvar = self(x)
 
         recon_loss = F.mse_loss(y_hat, y)
-        kld_loss = torch.mean(-0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1), dim=0)
+        kld_loss = torch.mean(
+            -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1), dim=0
+        )
         loss = recon_loss + self.beta * self.kld_weight * kld_loss
 
         self.loss_hist += loss.item()
         if batch_idx != 0 and batch_idx % self.log_step == 0:
-            self.logger.experiment.add_scalar('loss', self.loss_hist / self.log_step, self.log_it)
+            self.logger.experiment.add_scalar(
+                "loss", self.loss_hist / self.log_step, self.log_it
+            )
             self.loss_hist = 0.0
             self.log_it += 1
 

@@ -11,29 +11,28 @@ import json
 
 
 def checkpoint_to_script(original_filename, script_filename):
-
     params = cnn_image_parameters()
     model = load_model_for_eval(original_filename)
     script = torch.jit.trace_module(
         model, {"evaluate": torch.zeros(params["img_size"])}
     )
     torch.jit.save(script, script_filename)
-    print(f'saved torchscript model to {script_filename}')
+    print(f"saved torchscript model to {script_filename}")
 
     # save the parameters as json
     # we do not want all the parameters since some of them are np arrays
     required_params = (
-            "comm_range",
-            "img_res",
-            "kernel_std",
-            "meters_per_pixel",
-            "min_area_factor",
+        "comm_range",
+        "img_res",
+        "kernel_std",
+        "meters_per_pixel",
+        "min_area_factor",
     )
     params = {k: params[k] for k in required_params}
     params_filename = script_filename + ".json"
     with open(params_filename, "w") as f:
         json.dump(params, f)
-        print(f'saved torchscript model parameters to {params_filename}')
+        print(f"saved torchscript model parameters to {params_filename}")
 
 
 def plot(original_filename, script_filename):
@@ -65,15 +64,24 @@ def plot(original_filename, script_filename):
 
 
 if __name__ == "__main__":
-    parser = ArgumentParser(description="Convert a pytorch model to a torchscript model. "
+    parser = ArgumentParser(
+        description="Convert a pytorch model to a torchscript model. "
         + "The converted model will have a method called evaluate that processes a torch image."
     )
     parser.add_argument("model", help="The filename of the checkpoint.")
-    parser.add_argument("script", help="The filename where the torchscript should be saved.")
-    parser.add_argument("--convert", help="Only run the conversion method. Do not plot the results.",
-                        action="store_true")
-    parser.add_argument("--plot", help="Only run plot the results. Do not run the conversion method.",
-                        action="store_true")
+    parser.add_argument(
+        "script", help="The filename where the torchscript should be saved."
+    )
+    parser.add_argument(
+        "--convert",
+        help="Only run the conversion method. Do not plot the results.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--plot",
+        help="Only run plot the results. Do not run the conversion method.",
+        action="store_true",
+    )
     args = parser.parse_args()
 
     if not args.plot:

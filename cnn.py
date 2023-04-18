@@ -35,17 +35,17 @@ def load_model_from_checkpoint(model_file):
     """load model from saved checkpoint"""
     model_file = Path(model_file)
     if not model_file.exists():
-        print(f'provided model {model_file} not found')
+        print(f"provided model {model_file} not found")
         return None
 
     # be sure to follow symlinks before parsing filename
     model_file_name = get_file_name(model_file)
 
-    model_type = model_file_name.split('__')[0]
+    model_type = model_file_name.split("__")[0]
     try:
         model = globals()[model_type].load_from_checkpoint(str(model_file))
     except:
-        print(f'unrecognized model type {model_type} from model {model_file}')
+        print(f"unrecognized model type {model_type} from model {model_file}")
         return None
 
     return model
@@ -64,43 +64,51 @@ def load_model_for_eval(model_file):
 
 
 def train_main(args):
-
     cpus = os.cpu_count()
     addl_training_args = {}
     if torch.cuda.is_available():
-        addl_training_args['gpus'] = min(torch.cuda.device_count(), args.gpus)
+        addl_training_args["gpus"] = min(torch.cuda.device_count(), args.gpus)
         if torch.cuda.device_count() > 1:
-            addl_training_args['distributed_backend'] = 'ddp'
+            addl_training_args["distributed_backend"] = "ddp"
     else:
-        addl_training_args['gpus'] = 0
+        addl_training_args["gpus"] = 0
 
     # load dataset
 
     train_dataset = ConnectivityDataset(args.dataset, train=True)
     val_dataset = ConnectivityDataset(args.dataset, train=False)
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size,
-                                  shuffle=True, num_workers=cpus)
-    val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, num_workers=cpus)
-    dataset_names = '\n'.join(args.dataset)
-    print('training on the following dataset(s):')
-    print(f'{dataset_names}')
+    train_dataloader = DataLoader(
+        train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=cpus
+    )
+    val_dataloader = DataLoader(
+        val_dataset, batch_size=args.batch_size, num_workers=cpus
+    )
+    dataset_names = "\n".join(args.dataset)
+    print("training on the following dataset(s):")
+    print(f"{dataset_names}")
 
     # initialize model or load one, if provided
 
     model_args = {}
-    model_args['log_step'] = ceil(len(train_dataloader)/100) # log averaged loss ~100 times per epoch
-    model_args['kld_weight'] = 1.0 / len(train_dataloader)
+    model_args["log_step"] = ceil(
+        len(train_dataloader) / 100
+    )  # log averaged loss ~100 times per epoch
+    model_args["kld_weight"] = 1.0 / len(train_dataloader)
 
     # set dataset_name to a string of the fixed number of task agents used in each dataset
     dataset_task_agent_counts = []
     for dataset_filename in args.dataset:
         dataset = Path(dataset_filename)
-        dataset_task_agent_counts.append(int(dataset.name.split('_')[3][:-1]))
-        dataset_res = dataset.name[:4]  # assume all datasets have the same resolution, for now
+        dataset_task_agent_counts.append(int(dataset.name.split("_")[3][:-1]))
+        dataset_res = dataset.name[
+            :4
+        ]  # assume all datasets have the same resolution, for now
     dataset_task_agent_counts.sort()
-    model_args['dataset_name'] = dataset_res + 't'.join(map(str, dataset_task_agent_counts)) + 't'
+    model_args["dataset_name"] = (
+        dataset_res + "t".join(map(str, dataset_task_agent_counts)) + "t"
+    )
 
-    if args.model[-5:] == '.ckpt':
+    if args.model[-5:] == ".ckpt":
         model = load_model_from_checkpoint(args.model)
         if model is None:
             return
@@ -108,116 +116,143 @@ def train_main(args):
         try:
             model = globals()[args.model](**model_args)
         except:
-            print(f'unrecognized model type {args.model}')
+            print(f"unrecognized model type {args.model}")
             return
 
     # train network
 
-    logger = pl_loggers.TensorBoardLogger('runs/', name=model.model_name)
-    trainer = pl.Trainer(logger=logger, max_epochs=args.epochs, weights_summary='top', **addl_training_args)
+    logger = pl_loggers.TensorBoardLogger("runs/", name=model.model_name)
+    trainer = pl.Trainer(
+        logger=logger,
+        max_epochs=args.epochs,
+        weights_summary="top",
+        **addl_training_args,
+    )
     trainer.fit(model, train_dataloader, val_dataloader)
 
 
 def eval_main(args):
-
     model = load_model_for_eval(args.model)
     if model is None:
         return
 
     dataset_file = Path(args.dataset)
     if not dataset_file.exists():
-        print(f'provided dataset {dataset_file} not found')
+        print(f"provided dataset {dataset_file} not found")
         return
-    hdf5_file = h5py.File(dataset_file, mode='r')
+    hdf5_file = h5py.File(dataset_file, mode="r")
 
-    mode = 'train' if args.train else 'test'
-    dataset_len = hdf5_file[mode]['task_img'].shape[0]
+    mode = "train" if args.train else "test"
+    dataset_len = hdf5_file[mode]["task_img"].shape[0]
 
     if args.sample is None:
         idx = np.random.randint(dataset_len)
     elif args.sample > dataset_len:
-        print(f'provided sample index {args.sample} out of range of {mode} dataset with length {dataset_len}')
+        print(
+            f"provided sample index {args.sample} out of range of {mode} dataset with length {dataset_len}"
+        )
         return
     else:
         idx = args.sample
 
-    input_image = hdf5_file[mode]['task_img'][idx,...]
-    output_image = hdf5_file[mode]['comm_img'][idx,...]
+    input_image = hdf5_file[mode]["task_img"][idx, ...]
+    output_image = hdf5_file[mode]["comm_img"][idx, ...]
     model_image = model.inference(input_image)
 
     if args.arrays:
-        task_config = hdf5_file[mode]['task_config'][idx,...]
-        print(f'task_config:\n{task_config}')
-        mst_config = connect_graph(task_config, cnn_image_parameters()['comm_range'])
-        print(f'msg_config:\n{mst_config}')
-        comm_config = hdf5_file[mode]['comm_config'][idx,...]
-        print(f'comm_config:\n{comm_config[~np.isnan(comm_config[:,0])]}')
+        task_config = hdf5_file[mode]["task_config"][idx, ...]
+        print(f"task_config:\n{task_config}")
+        mst_config = connect_graph(task_config, cnn_image_parameters()["comm_range"])
+        print(f"msg_config:\n{mst_config}")
+        comm_config = hdf5_file[mode]["comm_config"][idx, ...]
+        print(f"comm_config:\n{comm_config[~np.isnan(comm_config[:,0])]}")
 
     if not args.save:
-        print(f'showing sample {idx} from {dataset_file.name}')
-        ax = plt.subplot(1,3,1)
+        print(f"showing sample {idx} from {dataset_file.name}")
+        ax = plt.subplot(1, 3, 1)
         ax.imshow(input_image.T)
         ax.invert_yaxis()
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
-        ax.set_title('input')
-        ax = plt.subplot(1,3,2)
+        ax.set_title("input")
+        ax = plt.subplot(1, 3, 2)
         ax.imshow(output_image.T)
         ax.invert_yaxis()
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
-        ax.set_title('target')
-        ax = plt.subplot(1,3,3)
+        ax.set_title("target")
+        ax = plt.subplot(1, 3, 3)
         ax.imshow(model_image.T)
         ax.invert_yaxis()
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
-        ax.set_title('output')
+        ax.set_title("output")
         plt.tight_layout()
         plt.show()
 
     if args.save:
         imgs = (input_image, output_image, model_image)
-        names = ('input', 'output', 'model')
+        names = ("input", "output", "model")
         for img, name in zip(imgs, names):
             fig = plt.figure()
-            fig.set_size_inches((4,4))
-            ax = plt.Axes(fig, [0., 0., 1., 1.])
+            fig.set_size_inches((4, 4))
+            ax = plt.Axes(fig, [0.0, 0.0, 1.0, 1.0])
             ax.set_axis_off()
             fig.add_axes(ax)
-            ax.imshow(np.flipud(img.T), aspect='equal', cmap='gist_gray_r')
-            filename = '_'.join((str(idx), name, dataset_file.stem)) + '.png'
+            ax.imshow(np.flipud(img.T), aspect="equal", cmap="gist_gray_r")
+            filename = "_".join((str(idx), name, dataset_file.stem)) + ".png"
             plt.savefig(filename, dpi=150)
-            print(f'saved image {filename}')
+            print(f"saved image {filename}")
 
     hdf5_file.close()
 
 
-if __name__ == '__main__':
-
-    parser = argparse.ArgumentParser(description='utilities for train and testing a connectivity CNN')
-    subparsers = parser.add_subparsers(dest='command', required=True)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="utilities for train and testing a connectivity CNN"
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
     # train subparser
-    train_parser = subparsers.add_parser('train', help='train connectivity CNN model on provided dataset')
-    train_parser.add_argument('model', type=str, help='model type to train or checkpoint to pick up from')
-    train_parser.add_argument('dataset', type=str, help='dataset for training', nargs='+')
-    train_parser.add_argument('--epochs', type=int, default=10, help='number of epochs to train for')
-    train_parser.add_argument('--batch-size', type=int, default=4, help='batch size for training')
-    train_parser.add_argument('--gpus', type=int, default=-1, help='number of GPUs to use for training')
+    train_parser = subparsers.add_parser(
+        "train", help="train connectivity CNN model on provided dataset"
+    )
+    train_parser.add_argument(
+        "model", type=str, help="model type to train or checkpoint to pick up from"
+    )
+    train_parser.add_argument(
+        "dataset", type=str, help="dataset for training", nargs="+"
+    )
+    train_parser.add_argument(
+        "--epochs", type=int, default=10, help="number of epochs to train for"
+    )
+    train_parser.add_argument(
+        "--batch-size", type=int, default=4, help="batch size for training"
+    )
+    train_parser.add_argument(
+        "--gpus", type=int, default=-1, help="number of GPUs to use for training"
+    )
 
     # inference subparser
-    eval_parser = subparsers.add_parser('eval', help='run inference on samples(s)')
-    eval_parser.add_argument('model', type=str, help='model to use for inference')
-    eval_parser.add_argument('dataset', type=str, help='dataset to draw samples from')
-    eval_parser.add_argument('--sample', type=int, help='sample to perform inference on')
-    eval_parser.add_argument('--save', action='store_true', help='save intput, output and target images')
-    eval_parser.add_argument('--train', action='store_true', help='select sample from training partition')
-    eval_parser.add_argument('--arrays', action='store_true', help='print task/comm. agent arrays')
+    eval_parser = subparsers.add_parser("eval", help="run inference on samples(s)")
+    eval_parser.add_argument("model", type=str, help="model to use for inference")
+    eval_parser.add_argument("dataset", type=str, help="dataset to draw samples from")
+    eval_parser.add_argument(
+        "--sample", type=int, help="sample to perform inference on"
+    )
+    eval_parser.add_argument(
+        "--save", action="store_true", help="save intput, output and target images"
+    )
+    eval_parser.add_argument(
+        "--train", action="store_true", help="select sample from training partition"
+    )
+    eval_parser.add_argument(
+        "--arrays", action="store_true", help="print task/comm. agent arrays"
+    )
 
     args = parser.parse_args()
 
-    if args.command == 'train':
+    if args.command == "train":
         train_main(args)
-    if args.command == 'eval':
+    if args.command == "eval":
         eval_main(args)

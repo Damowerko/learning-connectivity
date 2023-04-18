@@ -45,21 +45,21 @@ def connect_graph(points, max_dist):
 
     mst_edges = []
     for i in range(mst.shape[0]):
-        for j in true_idcs(mst[i,:] > 0):
-            mst_edges.append([i,j,mst[i,j]])
+        for j in true_idcs(mst[i, :] > 0):
+            mst_edges.append([i, j, mst[i, j]])
     mst_edges = sorted(mst_edges, key=lambda item: item[2], reverse=True)
 
     it = 0
-    new_points = np.zeros((0,2))
+    new_points = np.zeros((0, 2))
     while it < len(mst_edges) and not mst_edges[it][2] < max_dist:
-        xi = points[mst_edges[it][0],:]
-        xj = points[mst_edges[it][1],:]
+        xi = points[mst_edges[it][0], :]
+        xj = points[mst_edges[it][1], :]
         dist = mst_edges[it][2]
 
         arrow = (xj - xi) / dist
-        mid_points = np.zeros((floor(dist / max_dist),2))
+        mid_points = np.zeros((floor(dist / max_dist), 2))
         for i in range(mid_points.shape[0]):
-            mid_points[i,:] = xi + arrow * dist * (i+1) / ceil(dist / max_dist)
+            mid_points[i, :] = xi + arrow * dist * (i + 1) / ceil(dist / max_dist)
 
         it += 1
         new_points = np.vstack((new_points, mid_points))
@@ -80,11 +80,11 @@ def reduce_dispersion(points, count, max_range):
       new_points - the added points that reduce dispersion
     """
 
-    new_points = np.zeros((0,2))
+    new_points = np.zeros((0, 2))
     for i in range(count):
         vor = spatial.Voronoi(points)
         tri = spatial.Delaunay(points)
-        disp_points = vor.vertices[tri.find_simplex(vor.vertices) >= 0,:]
+        disp_points = vor.vertices[tri.find_simplex(vor.vertices) >= 0, :]
         points_dists = np.linalg.norm(points[:, np.newaxis] - disp_points, axis=2)
         disp_dists = np.amin(points_dists, axis=0)
 
@@ -111,7 +111,9 @@ def min_feasible_sample(task_agents, comm_range, bbx):
 
     success = False
     while not success:
-        x_task = np.random.random((task_agents,2)) * (bbx[1::2] - bbx[0::2]) + bbx[0::2]
+        x_task = (
+            np.random.random((task_agents, 2)) * (bbx[1::2] - bbx[0::2]) + bbx[0::2]
+        )
         x_comm = connect_graph(x_task, comm_range)
         if x_comm.shape[0] != 0:
             break
@@ -119,11 +121,12 @@ def min_feasible_sample(task_agents, comm_range, bbx):
 
 
 def feasibility_test(args):
-
-    img_bbx = 160/2 * np.asarray([-1, 1, -1, 1])
+    img_bbx = 160 / 2 * np.asarray([-1, 1, -1, 1])
     comm_range = 30
 
-    task_agents = np.random.randint(3,10) if args.task_agents is None else args.task_agents
+    task_agents = (
+        np.random.randint(3, 10) if args.task_agents is None else args.task_agents
+    )
     scale_factor = 1.0 if args.scale_factor is None else args.scale_factor
     comm_range = 30
 
@@ -132,19 +135,38 @@ def feasibility_test(args):
     x_task, x_comm = min_feasible_sample(task_agents, comm_range, sample_bbx)
 
     fig, ax = plt.subplots()
-    plot_config(np.vstack((x_task, x_comm)), task_ids=range(task_agents), bbx=img_bbx,
-                ax=ax, show=False)
-    ax.add_patch(mpl.patches.Rectangle(sample_bbx[::2], 2*abs(sample_bbx[0]), 2*abs(sample_bbx[1]),
-                                       fc='none', ec='g', lw=2))
+    plot_config(
+        np.vstack((x_task, x_comm)),
+        task_ids=range(task_agents),
+        bbx=img_bbx,
+        ax=ax,
+        show=False,
+    )
+    ax.add_patch(
+        mpl.patches.Rectangle(
+            sample_bbx[::2],
+            2 * abs(sample_bbx[0]),
+            2 * abs(sample_bbx[1]),
+            fc="none",
+            ec="g",
+            lw=2,
+        )
+    )
     plt.show()
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='feasibility tests')
-    parser.add_argument('--scale-factor', type=float, help='ratio of area covered by agents to image area')
-    parser.add_argument('--task-agents', type=int, help='number of task agent locations to sample')
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="feasibility tests")
+    parser.add_argument(
+        "--scale-factor",
+        type=float,
+        help="ratio of area covered by agents to image area",
+    )
+    parser.add_argument(
+        "--task-agents", type=int, help="number of task agent locations to sample"
+    )
     p = parser.parse_args()
 
-    mpl.rcParams['figure.dpi'] = 150
+    mpl.rcParams["figure.dpi"] = 150
 
     feasibility_test(p)
