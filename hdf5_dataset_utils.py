@@ -16,8 +16,8 @@ import torch
 from torch.utils.data import Dataset
 
 from mid import lloyd
-from mid.connectivity_optimization import ConnectivityOpt as ConnOpt
 from mid.channel_model import PiecewisePathLossModel
+from mid.connectivity_optimization import ConnectivityOpt as ConnOpt
 from mid.feasibility import adaptive_bbx, min_feasible_sample
 
 
@@ -171,19 +171,28 @@ def generate_hdf5_image_data(params, sample_queue, writer_queue):
 
     for d in iter(sample_queue.get, None):
         pad = params["max_comm_agents"] - d["comm_config"].shape[0]
-        conn_opt = ConnOpt(params["channel_model"], d["task_config"], d["comm_config"])
 
         out_dict = {}
         out_dict["mode"] = d["mode"]
         out_dict["task_config"] = d["task_config"]
         out_dict["task_img"] = lloyd.kernelized_config_img(d["task_config"], params)
-        out_dict["connectivity"] = conn_opt.maximize_connectivity()
-        out_dict["comm_config"] = np.vstack(
-            (conn_opt.get_comm_config(), np.empty((pad, 2)) * np.nan)
-        )
-        out_dict["comm_img"] = lloyd.kernelized_config_img(
-            conn_opt.get_comm_config(), params
-        )
+
+        if params["no_label"]:
+            comm = np.zeros((d["comm_config"].shape[0], 2))
+            out_dict["connectivity"] = 0.0
+            out_dict["comm_config"] = np.vstack((comm, np.empty((pad, 2)) * np.nan))
+            out_dict["comm_img"] = np.zeros((params["img_res"],) * 2)
+        else:
+            conn_opt = ConnOpt(
+                params["channel_model"], d["task_config"], d["comm_config"]
+            )
+            out_dict["connectivity"] = conn_opt.maximize_connectivity()
+            out_dict["comm_config"] = np.vstack(
+                (conn_opt.get_comm_config(), np.empty((pad, 2)) * np.nan)
+            )
+            out_dict["comm_img"] = lloyd.kernelized_config_img(
+                conn_opt.get_comm_config(), params
+            )
 
         # put sample dict in writer queue to be written to the hdf5 database
         writer_queue.put(out_dict)
@@ -215,6 +224,7 @@ def generate_hdf5_dataset(args):
     params[
         "task_agents"
     ] = task_agents  # so that params can be passed around with all necessary args
+    params["no_label"] = args.no_label
 
     train_samples = int(0.85 * samples)
     params["sample_count"] = {"train": train_samples, "test": samples - train_samples}
@@ -222,7 +232,10 @@ def generate_hdf5_dataset(args):
     # an overestimate of the maximum number of task agents that might be
     # deployed needed for hdf5 data sizing, which must be fixed for all samples
     # stored in the dataset
-    params["max_comm_agents"] = 3 * ceil(params["img_side_len"] / params["comm_range"])
+    params["max_comm_agents"] = (
+        ceil(params["img_side_len"] / params["comm_range"]) ** 2 // 4
+    )
+    print(f"max comm agents: {params['max_comm_agents']}")
 
     # ensure given number of task agents fit in the image at the minimum
     # desired density to prevent crowding
@@ -291,7 +304,7 @@ def generate_hdf5_dataset(args):
     for mode in ("train", "test"):
         it = 0
         while it < params["sample_count"][mode]:
-            alpha = rng.random()  # [0, 1)
+            alpha = 1.0 if args.max_bbox else rng.random()  # [0, 1)
             sample_bbx = alpha * params["max_agent_bbx"] + (1 - alpha) * min_agent_bbx
 
             x_task, x_comm = min_feasible_sample(
@@ -426,6 +439,18 @@ if __name__ == "__main__":
         type=int,
         metavar="N",
         help="number of worker processes to use; default is # of CPU cores",
+    )
+    gen_parser.add_argument(
+        "--no-label",
+        default=False,
+        action="store_true",
+        help="do not generate labels for the dataset",
+    )
+    gen_parser.add_argument(
+        "--max-bbox",
+        default=False,
+        action="store_true",
+        help="use the maximum bounding box for task agents",
     )
 
     # view subparser
