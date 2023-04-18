@@ -653,12 +653,24 @@ def stats_compiler(params, results_queue):
 
 def compute_stats_main(args):
     compute_stats_test(
-        args.model, args.dataset, args.train, args.samples, args.nosave, args.jobs
+        args.model,
+        args.dataset,
+        args.train,
+        args.samples,
+        args.nosave,
+        args.jobs,
+        args.output,
     )
 
 
 def compute_stats_test(
-    model_file, dataset_file, train=False, samples=None, nosave=False, jobs=None
+    model_file,
+    dataset_file,
+    train=False,
+    samples=None,
+    nosave=False,
+    jobs=None,
+    output=None,
 ):
     # load model and dataset
 
@@ -684,7 +696,11 @@ def compute_stats_test(
         else:
             dataset_len = samples
 
-    results_filename = f"{dataset_len}_samples_{model_name}_{dataset_file.stem}_stats"
+    results_filename = (
+        f"{dataset_len}_samples_{model_name}_{dataset_file.stem}_stats"
+        if output is None
+        else output
+    )
 
     # configure mutli-processing
 
@@ -1131,6 +1147,12 @@ if __name__ == "__main__":
         type=int,
         metavar="N",
         help="number of worker processes to use; default is # of CPU cores",
+    )
+    comp_parser.add_argument(
+        "--output",
+        "-o",
+        type=str,
+        help="output file to save stats to; default is stats.npy in the model directory",
     )
 
     parse_parser = subparsers.add_parser(
